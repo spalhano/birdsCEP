@@ -1,0 +1,220 @@
+*********************************************************************************************************************
+Pipeline tratamento dados UCE projeto biogegrafia comparada passeriformes do CEPE Palhano 2021
+*********************************************************************************************************************
+Nota: Compilação adaptada de pipelines Phyluce (Faircloth), Inpa (Andermann, Buainain) incluindo alternativa experimental para datasets com muito missing data e muita contaminaçao (toepads) MN (Palhano/Weksler)
+*********************************************************************************************************************
+
+###Passo 0. Definir o nome das sequências ANTES DE COMEÇAR .
+NAO DEVE HAVER NOS NOMES:
+-PONTOS
+-UNDERLINE (PINRICPALMENTE _0 E _1)
+-EVITAR MAIÚSCULAS E MINÚSCULAS
+-NÃO USAR ESPAÇOS
+
+********Terminal
+### PASSO 1. Rodar o ilumiprocessor para limpar arquivos da contaminação de adaptadores e bases de baixa qualidade (****TMUX****)
+--->comando: ilumiprocessor 
+pré-requisitos: configuration file ilumiprocessor.conf + raw fastq
+*Dica: nesse conf file as amostras poderão ser renomeadas. O nome das amostras não pode ter _0 ou _1 (ex: GENUS_SPS_1...), ponto (GENUS.SPS_0...), maiúsculas, espaço e/ou "-".
+**Dica2: TMUX
+
+### PASSO 2. Controle de qualidade da limpeza do ilumiprocessor
+--->comando: for i in * do phyluce_assembly_get_fastq_lengths
+pré-requisitos: input ilumiprocessor
+*Dica: TMUX
+
+### PASSO 3. Assemble (*pode ser feito com outros programas)
+comando: phyluce_assembly_assemblo_spades 
+pré-requisitos: configuration file assembly.conf + input dados limpos no ilumiprocessor
+*Dica: TMUX
+
+### Passo 4. Controle de qualidade do Assemble
+comando: for i in spades-assemblies/contigs/*.fasta do phyluce_assembly_get_fasta_lengths --input $i --csv; done 
+pré-requisito: input assembled data
+*Dica: TMUX
+
+### Passo 5.  Selecionar três ou quatro amostras de boa qualidade (com base no QC após assemble do Passo 4) para fazer a sequência de referência. 
+*no caso desse estudo comparado são 4 sequências de referência finais - organizados em diretórios distintos
+
+### Passo 6. Obter informações dos alinhamentos
+--->comando: phyluce_assembly_get_match_counts
+pré-requisitos: arquivo probe.matches.sqlite, samples ref_seqs.lastz, caminho para os arquivos .lastz, conf file, sequências de referência, informar o tipo de matriz
+
+### Passo 7. Extrair os dados de FASTA para cada TAXON para cada UCE. Para isso é necessário definir quais os táxons queremos no nosso "taxon set" e criar um configuration file.extrair os loci de UCE do dataset, usando as sequências de referência.
+--->comando: phyluce_assembly_get_fastas_from_match_counts 
+pré-requisito: contigs, probe.matches.sqlite, all_taxa.conf, incomplete-matrix
+
+### Passo 8. Exploiding monolithic fasta: individual statistics on UCE assemblys for a given taxon
+--->comando: phyluce_assembly_explode_get_fastas_file
+pré-requisito: as input use output passo 7
+
+### Passo 9. get summary stats on the FASTAS
+--->comando: for i in ~/.../all_exploded_fastas/*.fasta; do phyluce_assembly_get_fasta_lengths --input $i --csv; done
+
+*output info order: samples,contigs,total bp,mean length,95 CI length,min length,max length,median legnth,contigs >1kb
+ex: SAMPLE-ID.unaligned.fasta,4780,5154679,1078.38472803,2.82281180353,209,2827,1105.0,3464
+
+
+********BBEDIT
+### Passo 10. Baixar os fastas para o BBedit e ajeitar cabeçalho na busca (ctrl+ f) 
+--->comando:	find: >(uce-\d+)_\w.+	replace: >\1_NOME_DA_AMOSTRA |\1
+*O cabeçalho final deve ser:
+>uce-1003_SAMPLE-ID | uce-1003
+AAATACAG........
+
+
+********Terminal
+### Passo 11. Concatenar fastas na pasta "/taxon-sets/..._exploded-fastas" de cada projeto.
+--->comando: cat *.fasta > concat_ID.fasta
+
+### Passo 12. Transformar os N em ? antes de fazer o alinhamento (Passo 13) porque em geral os N's atrapalham essa função (todos os N (exceto os que estão no nome da amostra) foram transformados em missing data)
+--->comando: perl -npe '!/^>/&&s/N/?/g' .../concat_ID.fasta > concat_ID.all.semN.fasta
+
+### Passo 13. Alinhar fastas escolhidos para a sequência de referência em um alinhamento (no meu caso um alinhamento por subprojeto do doutorado).
+--->comando: phyluce_align_seqcap_align --fasta concat_ID.all.semN.fasta --output ALIGNMENT_ID --taxa X --aligner mafft --cores X --incomplete-matrix --ambiguous
+
+
+********Geneious
+### Passo 14. Importar alinhamento no GENEIOUS e fazer uma limpeza fina das piores sequências listar pelo %pairwise 
+*Dica: LIMPEZA FINA = verificar as regiões com pior qualidade das sequências (geralmente as extremidades); inserções e gaps fora do padrão. 
+Esse passo é lento e cansativo --> limpeza de quase 5 mil alinhamentos no olho --> nesse projeto foram ca. de  20 mil alinhamentos revisados a olho nu, porque são 4  sequências de referência.
+
+### Passo 15. Após a limpeza dos alinhamentos, selecionar todas as amostras e gerar uma sequência de referência 
+--->comando: Tools>generate sequence (50% e ? para missing data); marcar a opção create a sequence list; File > export ? selected documents > FASTA sequences/alignment (*.fasta)
+
+
+********BBEDIT
+### Passo 16. A sequência de referência exportada do geneious (no meu caso pasta downloads), deve ser aberta no BBedit e fazer substituição de cabeçalho das sequências, com o comando: 
+--->comando:
+find: >(uce-\d+)_.(\w.+) 
+replace: >\1_consensus_sequence |\1
+
+
+********Terminal
+### Passo 17. Para bater as amostras (Passo 18) na sequência de referência criada é necessário criar cópias dessa referência com o nome de cada amostra antes do comando. 
+exemplo: cp ~/.../SEQ-REF-ID.fasta ~/.../SAMPLE-ID.fasta
+
+Para modificar o nome das amostras no cabeçalho, dentro de cada arquivo da seq de referência (consenso):
+--->comando: sed -i 's/consensus_sequence/SAMPLE-ID/'g SAMPLE-ID.fasta
+
+### Passo 18. Bater as reads nas sequências consenso 
+pre-requisito: configuration file (phase.conf): 
+--->comando: phyluce_snp_bwa_multiple_align --config ~/.../CONFFILE-ID.conf --output ~/.../ID_multialign-bams --cores X --log-path  ~/.../logID --mem --subfolder split-adapter-quality-trimmed
+*Dica: TMUX ---> demora horas
+
+### Passo 19. Fasear os dados 
+--->comando: phyluce_snp_phase_uces --config ~/.../CONF-FILE-ID.conf --bams ~/.../ID_multialign-bams/ --output ~/.../ID_phased_reads --cores X ---log-path  ~/.../logID
+*Dica: TMUX
+
+### Passo 20. Organizar os outputs do faseamento na pasta de cada projeto 
+
+### Passo 21. Concatenar todos os todos os arquivos de alelos1 (_0) e alelos2 (_1) 		
+--->comandos:
+		cat *.0.clean.balanced.fasta > ID_concat.0.clean.balanced.fasta --> concatenar todos os alelos 1
+		cat *.1.clean.balanced.fasta > ID_concat.1.clean.balanced.fasta --> concatenar todos os alelos 2
+		cat ID_concat.* > ID_concat.all.fasta ----> esse concat.all.fasta é o equivalente ao all-incomplete-taxa.fasta do tutorial I do phyluce
+		perl -npe '!/^>/&&s/N/?/g' ID_concat.all.fasta > ID_concat.all.semN.fasta --> transformar Ns em ? para ter um melhor alinhamento	
+
+*Dica: arquivo ..._concat.all.fasta é o equivalente ao all-incomplete-taxa.fasta do tutorial I do phyluce
+*Dica2: a partir de agora o n de cada projeto será duplicado porque os dados estao faseados 
+
+### Passo 22. (i) Alinhar com ou sem cortar as pontas (trim) e  transformar os gaps em ? e cortar as pontas
+--->comando: phyluce_align_seqcap_align --fasta ~/.../ID_concat.all.semN.fasta --output ~/.../ID_align_no_out --cores X --incomplete-matrix --log-path  ~/.../logID --ambiguous --taxa X 
+
+*Dica: opção de comando adicional para não cortar as pontas: --no-trim
+
+(ii) Substituir os - para ? antes de cortar as pontas é preciso converter para fasta e 
+--->comando: perl -pi -w -e '!/^>/&&s/-/?/g' *.fasta
+
+### Passo 23. Computando algumas estatísticas básicas dos alinhamentos:
+--->comando: phyluce_align_get_align_summary_data --alignments ~/.../ID_align_no_out --cores X --log-path  ~/.../logID
+
+### Passo 24. Limpando os cabeçalhos. Antes do comando vamos criar uma pasta dentro de /5align chamada /1clean onde vamos salvar o output da limpeza.
+--->comando: phyluce_align_remove_locus_name_from_nexus_lines --alignments ~/.../ID_align_no_out  --output ~/.../ID_align_no_out_clean --cores X --log-path  ~/.../logID	
+
+### Passo 25. Selecionar a matriz de dados (%) --> a porcentagem é reference a quantidade de loci presente nas amostras.  
+*Dica1: Uma matriz de 75% significa que em um estudo com 100 indivíduos/táxons no total, todos os alinhamentos terão pelo menos 75 de 100 indivíduos/taxon. Note que essa métrica não é verdadeira para o individuo. Portanto a matriz de 75% não significa que dado um indivíduo/táxon) estará presente em 75 de 100 alinhamentos.
+**Dica2: use as estatísticas geradas no item 23
+***Dica3: lembre-se que se suas amostras estão faseadas logo você tem o dobro de táxons originalmente no dataset. (Ex. se tinha 50 amostras, agora na linha comando vai 100)
+****Dica4: datasets com toepads é aconselhável usar matriz de até 75%
+
+--->comando: phyluce_align_get_only_loci_with_min_taxa --alignments ~/.../ID_align_no_out_clean --taxa X --percent 0.X --output ~/.../ID_align_no_out_clean_Xp --cores X --log-path  ~/.../logID
+
+### Passo 26.A. Gerar a matriz final
+--->comando: phyluce_align_format_nexus_files_for_raxml --alignments ~/.../ID_align_no_out_clean_Xp --output ~/.../ID_align_no_out_clean_Xp --charsets --log-path ~/.../logID
+
+### Passo 27.A. Rodar iqtree
+--->comando: iqtree -s ~/.../ID_align_no_out_clean_Xp/ID_align_no_out_clean_X.phylip -nt AUTO -bb X -alrt X
+
+******************************************
+ALTERNATIVAS
+******************************************
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------> B. Extrair SNPs com Phyluce ---> gerar os alinhamento pro sNMF (pacote LEA -> R)
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+********Terminal
+### Converter os alinhamentos do Passo 25 de nexus para fasta (o script foi escrito com esse formato de dados)  
+--->comando: phyluce_align_convert_one_align_to_another --alignments ~/.../ID_align_no_out_clean_Xp --output ~/.../ID_align_no_out_clean_Xp-fasta --input-format nexus --output-format fasta --cores X
+
+### Passo 26.B. Eliminar todos os ? e - (gaps) dos alinhamentos para o script não selecionar esses caracteres como SNP 
+--->comandos:
+for i in *.fasta; do perl -npe '!/^>/&&s/[?]/N/g' $i > ./fasta_para_snps_semna/$i; done
+
+cd fasta_para_snps_semna
+
+for i in *.fasta; do perl -npe '!/^>/&&s/[-]/N/g' $i; done
+
+### Passo 27.B. Preparar um conf file pro script com a lista de amostras incluindo os alelos
+Ex. .conf file:
+SEQ-ID1_0
+SEQ-ID1_1
+SEQ-ID2_0
+SEQ-ID2_1
+...
+
+### Passo 28.B. Baixar o script que vai ser executado aqui
+https://github.com/tobiashofmann88/UCE-data-management/blob/master/snps_from_uce_alignments.py
+
+### Passo 29.B. Instalar o pacote cogent dentro do env do phyluce ou fora
+
+### Passo 30.B. Inserir o script na pasta que voce está ou no bin do phyluce pra ficar "automático", se tiver no bin acho que não precisa inserir python na linha de comando
+--->comando: python snps_from_uce_alignments.py --input D_align_no_out_clean_Xp-fasta/ --config ID.conf --phased --snps one --delimiter _ --output snps
+
+###Passo 31.B. Converter o output pra o formato .lfmm --> input pro SNMf:
+--->comando: sed '/^>/ d; s/./& /g'  snp.fasta > snp.lfmm
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------> C. Limpeza para diminuir os ramos longos  (toepads) nos alinhamentos
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+*Explicação: alternativa experimental para datasets com muito missing data e muita contaminaçao (toepads). Ele deve ser implementado depois que geramos a matriz final, arquivo .phylip (Passo 26.A.) 
+
+********Terminal
+Passo 27.C. Substituir missing (?) por gap (-) 
+--->comando: sed -i -e 's/?/-/g' ALIGNMENT-ID.phylip
+
+********Geneious
+Passo 28.C. Importar alinhamento e filtrar tudo o que tem menos de 15% ou mais de gaps (função STRIP ALIGNMENT COLUMNS), exportar como nexus
+
+********Paup
+Passo 29.C. Abrir no Paup e remover todas as sequências problemáticas, deletar todos os caracteres constantes (EXCLUDE CONSTANT), re-inlcuir todos os taxons (RESTORE ALL) e exportar (RELAXED PHYLIP)
+--->comandos:
+begin paup;
+  log start file=ID.log append=yes;
+  taxset  toepad = seqID-seqID; [define taxon partition including toepad terminals]
+	include constant /o; [include constant characters only]
+		EXP form=relphylip file=ID-C.phi; [save constant characters to phylip file]
+	exclude constant/o; [exclude constant characters]
+		EXP form=relphylip file=ID-V.phi; [save all variable characters = SNPs to phylip file]
+	delete toepad; [remove toepad terminals]
+		exclude constant; [exclude toepads SNPs  = variable characters only in toepads] 
+	restore all; [restore all taxa]
+		EXP form=relphylip file=ID-Va.phi; [save all remaining SNPs to phylip file]
+end;
+
+Resumo dos alinhamentos exportados:
+ID-C --> todos os sítios constantes removidos 
+ID-V --> todas os SNPs (árvores com ramos longos) 
+ID-Va --> dataset com os SNPs dos toepads (Va) removidos
+
+Passo 30.C. Rodar Filogenia com os alinhamentos novos no IQtree com correção de bias (ascertainment bias)
+--->comando: iqtree -s /.../Aligment_ID.phy -nt AUTO -bb 1000 -alrt 1000 -m GTR+ASC
