@@ -5,7 +5,7 @@
 		Esse pipeline reune os pipelines do Phyluce (Faircloth), Inpa (Andermann, Buainain) e MN (Palhano/Weksler)
 ****************************************************************************************************************************************************
 
-###Passo 0. Definir o nome das sequências ANTES DE COMECAR
+###PASSO 0. Definir o nome das sequências ANTES DE COMECAR
 NAO DEVE HAVER NOS NOMES:
 -PONTOS
 -UNDERLINE (PINRICPALMENTE _0 E _1)
