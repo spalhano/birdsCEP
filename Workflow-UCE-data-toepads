@@ -5,7 +5,7 @@ Pipeline tratamento dados UCE projeto biogegrafia comparada passeriformes do CEP
 Nota: Compilação adaptada de pipelines Phyluce (Faircloth), Inpa (Andermann, Buainain) incluindo alternativa experimental para datasets com muito missing data e muita contaminaçao (toepads) MN (Palhano/Weksler)
 *********************************************************************************************************************
 
-###Passo 0. Definir o nome das sequências ANTES DE COMEÇAR .
+### PASSO 0. Definir o nome das sequências ANTES DE COMEÇAR .
 NAO DEVE HAVER NOS NOMES:
 -PONTOS
 -UNDERLINE (PRINCIPALMENTE _0 E _1)
