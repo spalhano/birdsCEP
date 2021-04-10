@@ -5,7 +5,7 @@
 		Esse pipeline reune os pipelines do Phyluce (Faircloth), Inpa (Andermann, Buainain) e MN (Palhano/Weksler)
 ****************************************************************************************************************************************************
 
-###PASSO 0. Definir o nome das sequências ANTES DE COMECAR
+### Passo 0. Definir o nome das sequências ANTES DE COMECAR
 NAO DEVE HAVER NOS NOMES:
 -PONTOS
 -UNDERLINE (PINRICPALMENTE _0 E _1)
@@ -13,17 +13,17 @@ NAO DEVE HAVER NOS NOMES:
 -NAO USAR ESPACOS
 
 ********Terminal
-### PASSO 1. Rodar o ilumiprocessor para limpar arquivos da contaminacao de adaptadores e bases de baixa qualidade (****TMUX****)
+### Passo 1. Rodar o ilumiprocessor para limpar arquivos da contaminacao de adaptadores e bases de baixa qualidade (****TMUX****)
 --->comando: ilumiprocessor 
 illumiprocessor --input ~/.../raw-fastq/ --output ~/.../clean-fastq --config illumiprocessor.conf --cores X
 *Dica: nesse conf file as amostras poderão ser renomeadas --> siga as regras informadas no Passo 0
 **Dica2: TMUX
 
-### PASSO 2. Quality control da limpeza do ilumiprocessor
+### Passo 2. Quality control da limpeza do ilumiprocessor
 --->comando: for i in * do phyluce_assembly_get_fastq_lengths --input $i/split-adapter-quality-trimmed/ --csv done
 *Dica: TMUX
 
-### PASSO 3. Assemble (*pode ser feito com outros programas)
+### Passo 3. Assemble (*pode ser feito com outros programas)
 --->comando: phyluce_assembly_assemblo_spades --conf ~/.../CONF-ID.conf --output ~/.../spades-assemblies --cores X
 *Dica: TMUX
 
